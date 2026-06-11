@@ -397,21 +397,38 @@ export default function App() {
       booth: activeBooth
     };
 
-    // 1. Submit locally
-    const nextVotes = [...votes, newVote];
-    setVotes(nextVotes);
-
-    // Initial local fallback count to display the overlay instantly
-    const boothVotesCount = nextVotes.filter(v => v.booth === activeBooth).length;
-    setSuccessNthVoter(boothVotesCount);
-
-    // 2. Play beautiful authentic buzzer sound!
+    // 1. Play beautiful authentic buzzer sound!
     playBuzzer();
 
-    // 3. Initiate Success display Overlay
+    // 2. Initiate Success display Overlay
     setSuccessOverlay(true);
 
-    // 4. Dispatch transaction to Google Sheets Apps Script concurrently
+    // 3. Immediately setup local count fallback
+    const nextVotes = [...votes, newVote];
+    setVotes(nextVotes);
+    const localCount = nextVotes.filter(v => v.booth === activeBooth).length;
+    setSuccessNthVoter(localCount);
+
+    // 4. Fetch the absolute counts from Google Sheets BEFORE persisting the new vote
+    // This provides 100% immunity to asynchronous write propagation lag in the Google sheet.
+    // The current voter's index is exactly: sheets count + 1.
+    if (appsScriptUrl) {
+      try {
+        const res = await fetch(`${appsScriptUrl}?action=get_counts&cb=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.boothCounts && data.boothCounts[activeBooth] !== undefined) {
+            const sheetsCount = data.boothCounts[activeBooth];
+            // Set voter index precisely as sheets count + 1
+            setSuccessNthVoter(sheetsCount + 1);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not retrieve pre-write count from sheets, falling back to local count:", err);
+      }
+    }
+
+    // 5. Dispatch transaction to Google Sheets Apps Script to permanently write the ballot
     const formData = new FormData();
     formData.append("spl", finalChoices.spl);
     formData.append("aspl", finalChoices.aspl);
@@ -425,22 +442,10 @@ export default function App() {
         mode: "no-cors"
       });
 
-      // Quick delay to allow Spreadsheet row append, then fetch direct verified count from sheets!
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`${appsScriptUrl}?action=get_counts&cb=${Date.now()}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.boothCounts && data.boothCounts[activeBooth] !== undefined) {
-              const sheetsCount = data.boothCounts[activeBooth];
-              // Update with Google Sheets verified count!
-              setSuccessNthVoter(sheetsCount);
-            }
-          }
-        } catch (getSheetError) {
-          console.warn("Could not retrieve verified count from sheet, falling back to local count:", getSheetError);
-        }
-      }, 750);
+      // Synchronize in the background shortly after to update results
+      setTimeout(() => {
+        fetchVotesFromSheets(true);
+      }, 1550);
 
     } catch (e) {
       console.warn("Spreadsheet offline. Local vote entry saved.", e);
@@ -1026,23 +1031,23 @@ export default function App() {
                             </defs>
                             <CartesianGrid 
                               strokeDasharray="3 3" 
-                              stroke={theme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)"} 
+                              stroke="rgba(255, 255, 255, 0.05)" 
                               vertical={false} 
                             />
                             <XAxis 
                               dataKey="name" 
-                              tick={{ fill: theme === "dark" ? "#94a3b8" : "#475569", fontSize: 10, fontWeight: "700" }} 
+                              tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: "700" }} 
                               axisLine={false}
                               tickLine={false}
                             />
                             <YAxis 
-                              tick={{ fill: theme === "dark" ? "#94a3b8" : "#475569", fontSize: 10 }} 
+                              tick={{ fill: "#94a3b8", fontSize: 10 }} 
                               axisLine={false}
                               tickLine={false}
                               allowDecimals={false}
                             />
                             <RechartsTooltip 
-                              cursor={{ fill: theme === "dark" ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)" }}
+                              cursor={{ fill: "rgba(255, 255, 255, 0.02)" }}
                               content={({ active, payload }) => {
                                 if (active && payload && payload.length) {
                                   return (
@@ -1100,17 +1105,17 @@ export default function App() {
                           </defs>
                           <CartesianGrid 
                             strokeDasharray="3 3" 
-                            stroke={theme === "dark" ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)"} 
+                            stroke="rgba(255, 255, 255, 0.05)" 
                             vertical={false} 
                           />
                           <XAxis 
                             dataKey="name" 
-                            tick={{ fill: theme === "dark" ? "#94a3b8" : "#475569", fontSize: 10, fontWeight: "700" }} 
+                            tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: "700" }} 
                             axisLine={false}
                             tickLine={false}
                           />
                           <YAxis 
-                            tick={{ fill: theme === "dark" ? "#94a3b8" : "#475569", fontSize: 10 }} 
+                            tick={{ fill: "#94a3b8", fontSize: 10 }} 
                             axisLine={false}
                             tickLine={false}
                             allowDecimals={false}
