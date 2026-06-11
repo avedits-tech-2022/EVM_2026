@@ -59,8 +59,8 @@ const SEED_CANDIDATES: Candidate[] = [
 ];
 
 export default function App() {
-  // Theme & Settings State
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // Theme & Settings State (Forced Dark Theme)
+  const theme = "dark";
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
     return localStorage.getItem("evm_apps_script_url") || "https://script.google.com/macros/s/AKfycbwarqo1uNNFhElWa6KInVW55_8xdjfKiam1259mcOmIKGhcMjp0FRVzWmEMJfMkpOPejQ/exec";
   });
@@ -113,6 +113,10 @@ export default function App() {
   const [isSyncingRoster, setIsSyncingRoster] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<{ type: "success" | "error" | ""; text: string }>({ type: "", text: "" });
 
+  // Votes Sheet Pulling and Sync States
+  const [isSyncingVotes, setIsSyncingVotes] = useState(false);
+  const [votesSyncStatus, setVotesSyncStatus] = useState("");
+
   const loginScreenRef = useRef<HTMLDivElement>(null);
 
   // Keep mouse movement mapped to glossy sheen reflection for Apple Glass Cards
@@ -125,17 +129,12 @@ export default function App() {
     card.style.setProperty("--mouse-y", `${y}px`);
   };
 
-  // Synchronize CSS theme triggers with document body
+  // Synchronize CSS theme triggers with document body to force dark mode
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "light") {
-      root.classList.remove("dark");
-      root.classList.add("light");
-    } else {
-      root.classList.remove("light");
-      root.classList.add("dark");
-    }
-  }, [theme]);
+    root.classList.remove("light");
+    root.classList.add("dark");
+  }, []);
 
   // Sync state to local storage to maintain absolute data safety offline
   useEffect(() => {
@@ -149,6 +148,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("evm_apps_script_url", appsScriptUrl);
   }, [appsScriptUrl]);
+
+  // Synchronize system votes ledger with remote spreadsheet on master session login or results select
+  useEffect(() => {
+    if (sessionUser === "master" && appsScriptUrl) {
+      fetchVotesFromSheets(true);
+    }
+  }, [sessionUser, appsScriptUrl]);
+
+  useEffect(() => {
+    if (dashboardTab === "results" && appsScriptUrl) {
+      fetchVotesFromSheets(true);
+    }
+  }, [dashboardTab, appsScriptUrl]);
 
   // Audio Synthesizers utilizing native Web Audio API for true physical hardware sound effects
   const playBeep = (freq = 880, duration = 0.12) => {
@@ -303,6 +315,37 @@ export default function App() {
     }, 2700);
   };
 
+  const fetchVotesFromSheets = async (silent = false) => {
+    if (!appsScriptUrl) return;
+    if (!silent) {
+      setIsSyncingVotes(true);
+      setVotesSyncStatus("");
+    }
+    try {
+      const response = await fetch(`${appsScriptUrl}?cb=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && Array.isArray(data.votes)) {
+          setVotes(data.votes);
+          if (!silent) {
+            playBeep(1000, 0.2);
+            setVotesSyncStatus("Success: Synchronized all ballot boxes from connected Google Sheet!");
+            setTimeout(() => setVotesSyncStatus(""), 4000);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn("Failed to pull votes from Google Sheets:", err);
+      if (!silent) {
+        setVotesSyncStatus(`Remote sync error: ${err?.message || "Failed to establish get connection"}`);
+      }
+    } finally {
+      if (!silent) {
+        setIsSyncingVotes(false);
+      }
+    }
+  };
+
   const syncCandidatesToSheet = async () => {
     setIsSyncingRoster(true);
     setSyncStatusMsg({ type: "", text: "" });
@@ -358,7 +401,7 @@ export default function App() {
     const nextVotes = [...votes, newVote];
     setVotes(nextVotes);
 
-    // Filter votes for current booth to display exact sequence index
+    // Initial local fallback count to display the overlay instantly
     const boothVotesCount = nextVotes.filter(v => v.booth === activeBooth).length;
     setSuccessNthVoter(boothVotesCount);
 
@@ -381,11 +424,29 @@ export default function App() {
         body: formData,
         mode: "no-cors"
       });
+
+      // Quick delay to allow Spreadsheet row append, then fetch direct verified count from sheets!
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${appsScriptUrl}?action=get_counts&cb=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.boothCounts && data.boothCounts[activeBooth] !== undefined) {
+              const sheetsCount = data.boothCounts[activeBooth];
+              // Update with Google Sheets verified count!
+              setSuccessNthVoter(sheetsCount);
+            }
+          }
+        } catch (getSheetError) {
+          console.warn("Could not retrieve verified count from sheet, falling back to local count:", getSheetError);
+        }
+      }, 750);
+
     } catch (e) {
       console.warn("Spreadsheet offline. Local vote entry saved.", e);
     }
 
-    // Auto close overlay after 2.6 seconds and loop back to the initial terminal state
+    // Auto close overlay after 2.8 seconds and loop back to the initial terminal state
     setTimeout(() => {
       setSuccessOverlay(false);
       setIsSubmittingVote(false);
@@ -503,7 +564,7 @@ export default function App() {
         <div className="liquid-blob w-[32%] h-[32%] bg-pink-500/5 dark:bg-pink-600/10 top-[25%] left-[55%] animate-blob-slow-3"></div>
       </div>
       
-      {/* Floating Theme Switcher & Status Badging */}
+      {/* Floating Status Badge */}
       <div className="fixed top-4 right-4 z-[100] flex items-center gap-3">
         {sessionUser && (
           <div className="apple-glass py-1.5 px-3 flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border bg-white/5 backdrop-blur-md">
@@ -511,13 +572,6 @@ export default function App() {
             {sessionUser === "master" ? "Master Secure Terminal" : `Booth Terminal ${sessionUser.slice(-1)}`}
           </div>
         )}
-        <button 
-          onClick={() => setTheme(prev => prev === "dark" ? "light" : "dark")}
-          className="w-10 h-10 rounded-full apple-glass flex items-center justify-center border shadow-lg transition-transform active:scale-90 text-slate-800 dark:text-slate-200 bg-white/5 backdrop-blur-md"
-          title="Toggle UI Theme"
-        >
-          {theme === "dark" ? <Sun className="w-5 h-5 shrink-0" /> : <Moon className="w-5 h-5 shrink-0" />}
-        </button>
       </div>
 
       <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col justify-center items-center">
@@ -855,8 +909,38 @@ export default function App() {
             {dashboardTab === "results" && (
               <div className="space-y-6">
                 
+                {/* Remote Google Sheets Synchronizer Controller */}
+                {appsScriptUrl && (
+                  <div className="apple-glass p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 row-entrance bg-indigo-500/5 border-indigo-500/10">
+                    <div>
+                      <h4 className="text-sm font-black tracking-wide text-indigo-400 uppercase font-display">
+                        Google Sheets Live Synchronization
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Displaying metrics directly compiled from remote spreadsheet books Ballot1 to Ballot4.
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto">
+                      <button
+                        type="button"
+                        onClick={() => fetchVotesFromSheets(false)}
+                        disabled={isSyncingVotes}
+                        className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-white bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-950/40 rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/10 transition-all cursor-pointer select-none active:scale-95 shrink-0"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncingVotes ? "animate-spin" : ""}`} />
+                        {isSyncingVotes ? "Syncing Live Ledger..." : "Pull Live Votes"}
+                      </button>
+                      {votesSyncStatus && (
+                        <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 text-center sm:text-right">
+                          {votesSyncStatus}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Live Stats Blocks */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 row-entrance">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 row-entrance">
                   <div className="apple-glass p-4 text-center hover-glow-blue tab-transition" onMouseMove={handleMouseMove}>
                     <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Total Ledger Volume
@@ -1259,7 +1343,74 @@ export default function App() {
                     Use this script inside your Google sheet to record ballots. Backends isolate sheets automatically according to incoming transactions.
                   </p>
                   <pre className="p-4 rounded-xl bg-black/40 text-[10px] text-indigo-300 border border-slate-300/10 overflow-x-auto max-h-56 font-mono">
-{`function doPost(e) {
+{`function doGet(e) {
+  var doc = SpreadsheetApp.getActiveSpreadsheet();
+  var action = e.parameter.action;
+
+  // 1. Return direct counts specifically if requested
+  if (action === "get_counts") {
+    var boothCounts = { ballot1: 0, ballot2: 0, ballot3: 0, ballot4: 0 };
+    var totalVotesCount = 0;
+    var sheets = ["Ballot1", "Ballot2", "Ballot3", "Ballot4"];
+    
+    sheets.forEach(function(sName) {
+      var sheet = doc.getSheetByName(sName);
+      if (sheet) {
+        var lastRow = sheet.getLastRow();
+        if (lastRow > 1) {
+          var numVotes = lastRow - 1;
+          boothCounts[sName.toLowerCase()] = numVotes;
+          totalVotesCount += numVotes;
+        }
+      }
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      totalVotesCount: totalVotesCount,
+      boothCounts: boothCounts
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 2. Default: Fetch complete voter array list
+  var sheets = ["Ballot1", "Ballot2", "Ballot3", "Ballot4"];
+  var allVotes = [];
+  var boothCounts = { ballot1: 0, ballot2: 0, ballot3: 0, ballot4: 0 };
+  var totalVotesCount = 0;
+
+  sheets.forEach(function(sName) {
+    var sheet = doc.getSheetByName(sName);
+    if (sheet) {
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        var numVotes = lastRow - 1;
+        boothCounts[sName.toLowerCase()] = numVotes;
+        totalVotesCount += numVotes;
+        
+        var values = sheet.getRange(2, 1, numVotes, 4).getValues();
+        values.forEach(function(r, idx) {
+          allVotes.push({
+            id: "v-" + sName.toLowerCase() + "-" + idx,
+            timestamp: r[0],
+            spl: r[1],
+            aspl: r[2],
+            amb: r[3],
+            booth: sName.toLowerCase()
+          });
+        });
+      }
+    }
+  });
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "success",
+    totalVotesCount: totalVotesCount,
+    boothCounts: boothCounts,
+    votes: allVotes
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
 
   // 1. Is this a Reset command?
