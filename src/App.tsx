@@ -420,14 +420,30 @@ export default function App() {
     playBeep(450, 0.15);
   };
 
-  // Reset ALL local ledger votes and restore seed configuration
-  const handleResetSystem = () => {
-    if (confirm("Are you sure you want to clear all recorded votes and restore master defaults?")) {
+  // Reset ALL local ledger votes and candidates, and synchronize deletion with Google Sheets
+  const handleResetSystem = async () => {
+    if (confirm("Are you sure you want to delete ALL candidates and recorded votes? This action will completely clear the dashboard and synchronize the deletion with connected Google Sheets.")) {
       setVotes([]);
-      setCandidates(SEED_CANDIDATES);
+      setCandidates([]);
       resetBallotFormState();
       playBeep(350, 0.5);
-      alert("System Reset Completed.");
+
+      if (appsScriptUrl) {
+        try {
+          const formData = new FormData();
+          formData.append("action", "reset");
+          
+          await fetch(appsScriptUrl, {
+            method: "POST",
+            body: formData,
+            mode: "no-cors"
+          });
+        } catch (e) {
+          console.warn("Spreadsheet reset request failed", e);
+        }
+      }
+
+      alert("System has been fully reset. Candidates and votes have been removed.");
     }
   };
 
@@ -1217,6 +1233,26 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="border-t border-dashed border-slate-300/10 pt-6 max-w-2xl">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-1.5">Developer & Testing Utilities</h4>
+                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                    Quickly restore the standard seed roster of default candidates to test the voting process or dashboard interfaces.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Restore standard candidates? This will add the default candidates back to the roster.")) {
+                        setCandidates(SEED_CANDIDATES);
+                        playBeep(880, 0.2);
+                        alert("Default candidate seeds loaded successfully.");
+                      }
+                    }}
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 rounded-xl transition-all"
+                  >
+                    Load Default Candidate Seeds
+                  </button>
+                </div>
+
                 <div className="border-t border-dashed border-slate-300/10 pt-6">
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-3">Google Sheets Apps Script Template</h4>
                   <p className="text-xs text-slate-500 mb-4 leading-relaxed">
@@ -1226,7 +1262,24 @@ export default function App() {
 {`function doPost(e) {
   var doc = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 1. Is this a Vote coming from a Booth?
+  // 1. Is this a Reset command?
+  if (e.parameter.action === "reset") {
+    var sheets = ["Candidates", "Ballot1", "Ballot2", "Ballot3", "Ballot4"];
+    sheets.forEach(function(sName) {
+      var sheet = doc.getSheetByName(sName);
+      if (sheet) {
+        sheet.clear();
+        if (sName === "Candidates") {
+          sheet.appendRow(["id", "name", "post_id", "post_name", "face_url"]);
+        } else {
+          sheet.appendRow(["timestamp", "spl", "aspl", "amb"]);
+        }
+      }
+    });
+    return ContentService.createTextOutput(JSON.stringify({status: "reset done"})).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 2. Is this a Vote coming from a Booth?
   if (e.parameter.booth) {
     var boothId = e.parameter.booth;
     var sheetName = boothId.charAt(0).toUpperCase() + boothId.slice(1);
@@ -1245,10 +1298,27 @@ export default function App() {
     return ContentService.createTextOutput(JSON.stringify({status: "vote recorded"})).setMimeType(ContentService.MimeType.JSON);
   }
  
-  // 2. Is this the Master Dashboard pushing the Candidate Roster?
+  // 3. Is this the Master Dashboard pushing the Roster or Resetting?
   if (e.postData && e.postData.contents) {
     try {
       var payload = JSON.parse(e.postData.contents);
+      
+      if (payload && payload.action === "reset") {
+        var sheets = ["Candidates", "Ballot1", "Ballot2", "Ballot3", "Ballot4"];
+        sheets.forEach(function(sName) {
+          var sheet = doc.getSheetByName(sName);
+          if (sheet) {
+            sheet.clear();
+            if (sName === "Candidates") {
+              sheet.appendRow(["id", "name", "post_id", "post_name", "face_url"]);
+            } else {
+              sheet.appendRow(["timestamp", "spl", "aspl", "amb"]);
+            }
+          }
+        });
+        return ContentService.createTextOutput(JSON.stringify({status: "reset done"})).setMimeType(ContentService.MimeType.JSON);
+      }
+
       if (Array.isArray(payload)) {
         var cSheet = doc.getSheetByName("Candidates");
         if (!cSheet) {
