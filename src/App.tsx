@@ -149,11 +149,19 @@ export default function App() {
     localStorage.setItem("evm_apps_script_url", appsScriptUrl);
   }, [appsScriptUrl]);
 
-  // Synchronize system votes ledger with remote spreadsheet on master session login or results select
+  // Synchronize system votes ledger with remote spreadsheet on any terminal session login or setting change
   useEffect(() => {
-    if (sessionUser === "master" && appsScriptUrl) {
+    if (!appsScriptUrl || !sessionUser) return;
+
+    // Direct fetch of latest ledger on entry/change
+    fetchVotesFromSheets(true);
+
+    // Dynamic background polling every 6 seconds to capture asynchronous updates from other booths
+    const syncInterval = setInterval(() => {
       fetchVotesFromSheets(true);
-    }
+    }, 6000);
+
+    return () => clearInterval(syncInterval);
   }, [sessionUser, appsScriptUrl]);
 
   useEffect(() => {
@@ -547,10 +555,20 @@ export default function App() {
 
   // Format ordinals dynamically
   const getOrdinal = (n: number | string) => {
-    if (typeof n === "string") return n;
-    const s = ["th", "st", "nd", "rd"];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    const num = Number(n);
+    if (isNaN(num)) return String(n);
+    const j = num % 10;
+    const k = num % 100;
+    if (j === 1 && k !== 11) {
+      return num + "st";
+    }
+    if (j === 2 && k !== 12) {
+      return num + "nd";
+    }
+    if (j === 3 && k !== 13) {
+      return num + "rd";
+    }
+    return num + "th";
   };
 
   // Pre-filter candidate lists according to search keywords
