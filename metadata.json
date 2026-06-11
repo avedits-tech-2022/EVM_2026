@@ -1,0 +1,6 @@
+{
+  "name": "EVM Liquid Glass Clone",
+  "description": "A premium and highly polished Electronic Voting Machine (EVM) clone featuring a liquid glass UI, 5 workspace roles (Master Dashboard and 4 Ballot booths), 3-stage visual printed vote verification, responsive mechanics, and seamless secure syncing with Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
