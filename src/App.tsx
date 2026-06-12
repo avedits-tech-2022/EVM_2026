@@ -62,7 +62,11 @@ export default function App() {
   // Theme & Settings State (Forced Dark Theme)
   const theme = "dark";
   const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
-    return localStorage.getItem("evm_apps_script_url") || "https://script.google.com/macros/s/AKfycbwarqo1uNNFhElWa6KInVW55_8xdjfKiam1259mcOmIKGhcMjp0FRVzWmEMJfMkpOPejQ/exec";
+    const saved = localStorage.getItem("evm_apps_script_url");
+    if (!saved || saved.includes("AKfycbwarqo1uNNFhElWa6KInVW55")) {
+      return "https://script.google.com/macros/s/AKfycbxgxlpHdxzPfv2jEMYpfWoSkIADWijTNQHGyvGtuG09OLcxVioAtxPcswxrGnTqfNyTig/exec";
+    }
+    return saved;
   });
 
   // Authentication State
@@ -149,19 +153,11 @@ export default function App() {
     localStorage.setItem("evm_apps_script_url", appsScriptUrl);
   }, [appsScriptUrl]);
 
-  // Synchronize system votes ledger with remote spreadsheet on any terminal session login or setting change
+  // Synchronize system votes ledger with remote spreadsheet on master session login or results select
   useEffect(() => {
-    if (!appsScriptUrl || !sessionUser) return;
-
-    // Direct fetch of latest ledger on entry/change
-    fetchVotesFromSheets(true);
-
-    // Dynamic background polling every 6 seconds to capture asynchronous updates from other booths
-    const syncInterval = setInterval(() => {
+    if (sessionUser === "master" && appsScriptUrl) {
       fetchVotesFromSheets(true);
-    }, 6000);
-
-    return () => clearInterval(syncInterval);
+    }
   }, [sessionUser, appsScriptUrl]);
 
   useEffect(() => {
@@ -555,20 +551,10 @@ export default function App() {
 
   // Format ordinals dynamically
   const getOrdinal = (n: number | string) => {
-    const num = Number(n);
-    if (isNaN(num)) return String(n);
-    const j = num % 10;
-    const k = num % 100;
-    if (j === 1 && k !== 11) {
-      return num + "st";
-    }
-    if (j === 2 && k !== 12) {
-      return num + "nd";
-    }
-    if (j === 3 && k !== 13) {
-      return num + "rd";
-    }
-    return num + "th";
+    if (typeof n === "string") return n;
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
   // Pre-filter candidate lists according to search keywords
@@ -1332,7 +1318,7 @@ export default function App() {
                       Save Configuration
                     </button>
                     <button 
-                      onClick={() => setAppsScriptUrl("https://script.google.com/macros/s/AKfycbwarqo1uNNFhElWa6KInVW55_8xdjfKiam1259mcOmIKGhcMjp0FRVzWmEMJfMkpOPejQ/exec")}
+                      onClick={() => setAppsScriptUrl("https://script.google.com/macros/s/AKfycbxgxlpHdxzPfv2jEMYpfWoSkIADWijTNQHGyvGtuG09OLcxVioAtxPcswxrGnTqfNyTig/exec")}
                       className="px-4 py-2.5 text-xs uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400 bg-black/25 text-white hover:bg-black/50 border border-slate-300/10 rounded-xl"
                     >
                       Restore Default Address

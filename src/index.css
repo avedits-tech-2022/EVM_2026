@@ -17,6 +17,20 @@ body {
   transition: background-color 0.5s cubic-bezier(0.16, 1, 0.3, 1), color 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html.light body {
+  background-color: #eef2f8;
+  color: #0f172a;
+}
+
+/* Light / Dark gradients */
+.theme-bg-gradient {
+  background: radial-gradient(circle at 50% 0%, #111322 0%, #080911 60%, #020204 100%);
+}
+
+html.light .theme-bg-gradient {
+  background: radial-gradient(circle at 50% 0%, #f6f8fc 0%, #eef2f8 60%, #cbd5e1 100%);
+}
+
 /* Glassmorphism card */
 .apple-glass {
   position: relative;
@@ -32,6 +46,14 @@ body {
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html.light .apple-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.3) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.7);
+  border-left-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
 /* Interactive hover ray tracing */
 .apple-glass::before {
   content: '';
@@ -44,6 +66,10 @@ body {
   opacity: 0;
 }
 
+html.light .apple-glass::before {
+  background: radial-gradient(800px circle at var(--mouse-x, 0px) var(--mouse-y, 0px), rgba(0, 0, 0, 0.03), transparent 40%);
+}
+
 .apple-glass:hover::before {
   opacity: 1;
 }
@@ -51,6 +77,10 @@ body {
 .apple-glass:hover {
   transform: translateY(-2px);
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+}
+
+html.light .apple-glass:hover {
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.07);
 }
 
 /* EVM Grid Cards */
@@ -70,9 +100,19 @@ body {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html.light .evm-grid {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
 .evm-grid:hover {
   background: rgba(255, 255, 255, 0.015);
   border-color: rgba(255, 255, 255, 0.06);
+}
+
+html.light .evm-grid:hover {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 /* Red LED Indicator */
@@ -136,10 +176,21 @@ body {
   outline: none;
 }
 
+html.light .glass-input {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #0f172a;
+}
+
 .glass-input:focus {
   border-color: #3b82f6;
   background: rgba(0, 0, 0, 0.4);
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.25);
+}
+
+html.light .glass-input:focus {
+  background: #ffffff;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.12);
 }
 
 /* VVPAT Printer Setup */
@@ -154,6 +205,12 @@ body {
   overflow: hidden;
   box-shadow: inset 0 20px 50px rgba(0,0,0,0.9);
   transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+html.light .vvpat-casing {
+  background: linear-gradient(180deg, #1e293b, #0f172a);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 15px 35px rgba(0,0,0,0.4);
 }
 
 .vvpat-printer-slot {
@@ -260,6 +317,10 @@ body {
   border-radius: 3px;
 }
 
+html.light .custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 /* Universal Plasma Orb (Success) */
 .plasma-orb {
   position: relative;
@@ -357,6 +418,17 @@ body {
   transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html.light .liquid-glass-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.45) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  border-left: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 
+    0 12px 30px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 30px rgba(99, 102, 241, 0.03);
+}
+
 .liquid-glass-card:hover {
   transform: translateY(-4px);
   border-color: rgba(99, 102, 241, 0.25);
@@ -364,6 +436,14 @@ body {
     0 25px 45px rgba(0, 0, 0, 0.35),
     inset 0 1px 1px rgba(255, 255, 255, 0.1),
     0 0 50px rgba(99, 102, 241, 0.12);
+}
+
+html.light .liquid-glass-card:hover {
+  border-color: rgba(99, 102, 241, 0.25);
+  box-shadow: 
+    0 18px 40px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 40px rgba(99, 102, 241, 0.08);
 }
 
 /* Floating animated background liquid blobs */
@@ -381,6 +461,11 @@ body {
   filter: blur(110px);
   opacity: 0.13;
   transition: opacity 1s ease, filter 1s ease;
+}
+
+html.light .liquid-blob {
+  opacity: 0.20;
+  filter: blur(85px);
 }
 
 /* Floating animation definitions */
