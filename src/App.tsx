@@ -61,13 +61,7 @@ const SEED_CANDIDATES: Candidate[] = [
 export default function App() {
   // Theme & Settings State (Forced Dark Theme)
   const theme = "dark";
-  const [appsScriptUrl, setAppsScriptUrl] = useState<string>(() => {
-    const saved = localStorage.getItem("evm_apps_script_url");
-    if (!saved || saved.includes("AKfycbwarqo1uNNFhElWa6KInVW55")) {
-      return "https://script.google.com/macros/s/AKfycbxgxlpHdxzPfv2jEMYpfWoSkIADWijTNQHGyvGtuG09OLcxVioAtxPcswxrGnTqfNyTig/exec";
-    }
-    return saved;
-  });
+  const appsScriptUrl = "https://script.google.com/macros/s/AKfycbxgxlpHdxzPfv2jEMYpfWoSkIADWijTNQHGyvGtuG09OLcxVioAtxPcswxrGnTqfNyTig/exec";
 
   // Authentication State
   const [sessionUser, setSessionUser] = useState<Role | null>(() => {
@@ -109,7 +103,7 @@ export default function App() {
   const [newCandName, setNewCandName] = useState("");
   const [newCandPostId, setNewCandPostId] = useState<number>(0);
   const [newCandFaceUrl, setNewCandFaceUrl] = useState(PRESET_AVATARS[0]);
-  const [dashboardTab, setDashboardTab] = useState<"candidates" | "results" | "settings">("candidates");
+  const [dashboardTab, setDashboardTab] = useState<"candidates" | "results">("candidates");
   const [analyticsPostId, setAnalyticsPostId] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -149,11 +143,7 @@ export default function App() {
     localStorage.setItem("evm_votes_ledger", JSON.stringify(votes));
   }, [votes]);
 
-  useEffect(() => {
-    localStorage.setItem("evm_apps_script_url", appsScriptUrl);
-  }, [appsScriptUrl]);
-
-  // Synchronize system votes ledger with remote spreadsheet on master session login or results select
+  // Synchronize system votes ledger and candidates list with remote spreadsheet on master session login or results select
   useEffect(() => {
     if (sessionUser === "master" && appsScriptUrl) {
       fetchVotesFromSheets(true);
@@ -165,6 +155,13 @@ export default function App() {
       fetchVotesFromSheets(true);
     }
   }, [dashboardTab, appsScriptUrl]);
+
+  // Load data immediately on startup to sync roster of candidates and historical votes across all devices
+  useEffect(() => {
+    if (appsScriptUrl) {
+      fetchVotesFromSheets(true);
+    }
+  }, [appsScriptUrl]);
 
   // Audio Synthesizers utilizing native Web Audio API for true physical hardware sound effects
   const playBeep = (freq = 880, duration = 0.12) => {
@@ -329,17 +326,32 @@ export default function App() {
       const response = await fetch(`${appsScriptUrl}?cb=${Date.now()}`);
       if (response.ok) {
         const data = await response.json();
+        let hasVoteUpdate = false;
+        let hasCandUpdate = false;
+
         if (data && Array.isArray(data.votes)) {
           setVotes(data.votes);
-          if (!silent) {
-            playBeep(1000, 0.2);
-            setVotesSyncStatus("Success: Synchronized all ballot boxes from connected Google Sheet!");
-            setTimeout(() => setVotesSyncStatus(""), 4000);
+          hasVoteUpdate = true;
+        }
+        if (data && Array.isArray(data.candidates) && data.candidates.length > 0) {
+          setCandidates(data.candidates);
+          hasCandUpdate = true;
+        }
+
+        if (!silent) {
+          playBeep(1000, 0.2);
+          if (hasVoteUpdate && hasCandUpdate) {
+            setVotesSyncStatus("Success: Synchronized all ballot boxes and candidate roster!");
+          } else if (hasVoteUpdate) {
+            setVotesSyncStatus("Success: Synchronized ballot box volumes!");
+          } else {
+            setVotesSyncStatus("Success: Synchronized remote data successfully!");
           }
+          setTimeout(() => setVotesSyncStatus(""), 4000);
         }
       }
     } catch (err: any) {
-      console.warn("Failed to pull votes from Google Sheets:", err);
+      console.warn("Failed to pull data from Google Sheets:", err);
       if (!silent) {
         setVotesSyncStatus(`Remote sync error: ${err?.message || "Failed to establish get connection"}`);
       }
@@ -738,12 +750,6 @@ export default function App() {
                 className={`py-2 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${dashboardTab === "results" ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}
               >
                 Leading Leaders Results
-              </button>
-              <button 
-                onClick={() => setDashboardTab("settings")}
-                className={`py-2 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${dashboardTab === "settings" ? "border-emerald-500 text-emerald-600 dark:text-emerald-400" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"}`}
-              >
-                Cloud Sync settings
               </button>
             </div>
 
@@ -1277,236 +1283,7 @@ export default function App() {
               </div>
             )}
 
-            {/* ========================================================================== */}
-            {/* TAB: SYSTEM INTERFACES AND GOOGLE SHEETS SETTINGS */}
-            {/* ========================================================================== */}
-            {dashboardTab === "settings" && (
-              <div className="apple-glass p-6 space-y-6" onMouseMove={handleMouseMove}>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Settings className="w-5 h-5 text-indigo-500" />
-                    Cloud Configuration settings
-                  </h3>
-                  <p className="text-xs text-slate-500">Setup integration routes and connection webhooks.</p>
-                </div>
 
-                <div className="space-y-4 max-w-2xl">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">
-                      Google Sheets Web App / Apps Script URL
-                    </label>
-                    <input 
-                      type="text" 
-                      value={appsScriptUrl}
-                      onChange={(e) => setAppsScriptUrl(e.target.value)}
-                      placeholder="https://script.google.com/macros/s/..."
-                      className="glass-input px-4 py-3 rounded-xl text-sm w-full font-mono"
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1 lines-relaxed">
-                      All transaction records are deployed directly onto this endpoint. The terminal segments capitalization variables into separate tab structures: <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-blue-400">Candidates</span>, <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-blue-400">Ballot1</span>, <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-blue-400">Ballot2</span>, <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-blue-400">Ballot3</span>, <span className="font-mono bg-black/30 px-1 py-0.2 rounded text-blue-400">Ballot4</span>.
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button 
-                      onClick={() => {
-                        playBeep();
-                        alert("Settings updated successfully!");
-                      }}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
-                    >
-                      Save Configuration
-                    </button>
-                    <button 
-                      onClick={() => setAppsScriptUrl("https://script.google.com/macros/s/AKfycbxgxlpHdxzPfv2jEMYpfWoSkIADWijTNQHGyvGtuG09OLcxVioAtxPcswxrGnTqfNyTig/exec")}
-                      className="px-4 py-2.5 text-xs uppercase tracking-wider font-bold text-slate-600 dark:text-slate-400 bg-black/25 text-white hover:bg-black/50 border border-slate-300/10 rounded-xl"
-                    >
-                      Restore Default Address
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-dashed border-slate-300/10 pt-6 max-w-2xl">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-1.5">Developer & Testing Utilities</h4>
-                  <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-                    Quickly restore the standard seed roster of default candidates to test the voting process or dashboard interfaces.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm("Restore standard candidates? This will add the default candidates back to the roster.")) {
-                        setCandidates(SEED_CANDIDATES);
-                        playBeep(880, 0.2);
-                        alert("Default candidate seeds loaded successfully.");
-                      }
-                    }}
-                    className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-blue-500 hover:text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 border border-blue-500/20 rounded-xl transition-all"
-                  >
-                    Load Default Candidate Seeds
-                  </button>
-                </div>
-
-                <div className="border-t border-dashed border-slate-300/10 pt-6">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300 uppercase tracking-widest mb-3">Google Sheets Apps Script Template</h4>
-                  <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-                    Use this script inside your Google sheet to record ballots. Backends isolate sheets automatically according to incoming transactions.
-                  </p>
-                  <pre className="p-4 rounded-xl bg-black/40 text-[10px] text-indigo-300 border border-slate-300/10 overflow-x-auto max-h-56 font-mono">
-{`function doGet(e) {
-  var doc = SpreadsheetApp.getActiveSpreadsheet();
-  var action = e.parameter.action;
-
-  // 1. Return direct counts specifically if requested
-  if (action === "get_counts") {
-    var boothCounts = { ballot1: 0, ballot2: 0, ballot3: 0, ballot4: 0 };
-    var totalVotesCount = 0;
-    var sheets = ["Ballot1", "Ballot2", "Ballot3", "Ballot4"];
-    
-    sheets.forEach(function(sName) {
-      var sheet = doc.getSheetByName(sName);
-      if (sheet) {
-        var lastRow = sheet.getLastRow();
-        if (lastRow > 1) {
-          var numVotes = lastRow - 1;
-          boothCounts[sName.toLowerCase()] = numVotes;
-          totalVotesCount += numVotes;
-        }
-      }
-    });
-
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "success",
-      totalVotesCount: totalVotesCount,
-      boothCounts: boothCounts
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 2. Default: Fetch complete voter array list
-  var sheets = ["Ballot1", "Ballot2", "Ballot3", "Ballot4"];
-  var allVotes = [];
-  var boothCounts = { ballot1: 0, ballot2: 0, ballot3: 0, ballot4: 0 };
-  var totalVotesCount = 0;
-
-  sheets.forEach(function(sName) {
-    var sheet = doc.getSheetByName(sName);
-    if (sheet) {
-      var lastRow = sheet.getLastRow();
-      if (lastRow > 1) {
-        var numVotes = lastRow - 1;
-        boothCounts[sName.toLowerCase()] = numVotes;
-        totalVotesCount += numVotes;
-        
-        var values = sheet.getRange(2, 1, numVotes, 4).getValues();
-        values.forEach(function(r, idx) {
-          allVotes.push({
-            id: "v-" + sName.toLowerCase() + "-" + idx,
-            timestamp: r[0],
-            spl: r[1],
-            aspl: r[2],
-            amb: r[3],
-            booth: sName.toLowerCase()
-          });
-        });
-      }
-    }
-  });
-
-  return ContentService.createTextOutput(JSON.stringify({
-    status: "success",
-    totalVotesCount: totalVotesCount,
-    boothCounts: boothCounts,
-    votes: allVotes
-  })).setMimeType(ContentService.MimeType.JSON);
-}
-
-function doPost(e) {
-  var doc = SpreadsheetApp.getActiveSpreadsheet();
-
-  // 1. Is this a Reset command?
-  if (e.parameter.action === "reset") {
-    var sheets = ["Candidates", "Ballot1", "Ballot2", "Ballot3", "Ballot4"];
-    sheets.forEach(function(sName) {
-      var sheet = doc.getSheetByName(sName);
-      if (sheet) {
-        sheet.clear();
-        if (sName === "Candidates") {
-          sheet.appendRow(["id", "name", "post_id", "post_name", "face_url"]);
-        } else {
-          sheet.appendRow(["timestamp", "spl", "aspl", "amb"]);
-        }
-      }
-    });
-    return ContentService.createTextOutput(JSON.stringify({status: "reset done"})).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 2. Is this a Vote coming from a Booth?
-  if (e.parameter.booth) {
-    var boothId = e.parameter.booth;
-    var sheetName = boothId.charAt(0).toUpperCase() + boothId.slice(1);
-    var sheet = doc.getSheetByName(sheetName);
-   
-    if (!sheet) {
-      sheet = doc.insertSheet(sheetName);
-      sheet.appendRow(["timestamp", "spl", "aspl", "amb"]);
-    }
-    
-    // Force the timestamp to Indian Standard Time (IST) explicitly
-    var localTimestamp = Utilities.formatDate(new Date(), "GMT+5:30", "yyyy-MM-dd HH:mm:ss");
-   
-    sheet.appendRow([localTimestamp, e.parameter.spl, e.parameter.aspl, e.parameter.amb]);
-   
-    return ContentService.createTextOutput(JSON.stringify({status: "vote recorded"})).setMimeType(ContentService.MimeType.JSON);
-  }
- 
-  // 3. Is this the Master Dashboard pushing the Roster or Resetting?
-  if (e.postData && e.postData.contents) {
-    try {
-      var payload = JSON.parse(e.postData.contents);
-      
-      if (payload && payload.action === "reset") {
-        var sheets = ["Candidates", "Ballot1", "Ballot2", "Ballot3", "Ballot4"];
-        sheets.forEach(function(sName) {
-          var sheet = doc.getSheetByName(sName);
-          if (sheet) {
-            sheet.clear();
-            if (sName === "Candidates") {
-              sheet.appendRow(["id", "name", "post_id", "post_name", "face_url"]);
-            } else {
-              sheet.appendRow(["timestamp", "spl", "aspl", "amb"]);
-            }
-          }
-        });
-        return ContentService.createTextOutput(JSON.stringify({status: "reset done"})).setMimeType(ContentService.MimeType.JSON);
-      }
-
-      if (Array.isArray(payload)) {
-        var cSheet = doc.getSheetByName("Candidates");
-        if (!cSheet) {
-          cSheet = doc.insertSheet("Candidates");
-        }
-       
-        cSheet.clear();
-        cSheet.appendRow(["id", "name", "post_id", "post_name", "face_url"]);
-       
-        if (payload.length > 0) {
-          var rows = payload.map(function(c) {
-            return [c.id, c.name, c.post_id, c.post_name, c.face_url];
-          });
-          cSheet.getRange(2, 1, rows.length, 5).setValues(rows);
-        }
-        return ContentService.createTextOutput(JSON.stringify({status: "candidates synced"})).setMimeType(ContentService.MimeType.JSON);
-      }
-    } catch(err) {
-      return ContentService.createTextOutput(JSON.stringify({error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
-    }
-  }
- 
-  return ContentService.createTextOutput(JSON.stringify({error: "Unknown request"})).setMimeType(ContentService.MimeType.JSON);
-}`}
-                  </pre>
-                </div>
-              </div>
-            )}
 
           </div>
         )}
